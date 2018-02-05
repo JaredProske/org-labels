@@ -120,7 +120,7 @@ function* standardize(args) {
   }
 
   var res = yield request({
-      uri    : 'https://api.github.com/repos/' + config_repo + '/contents/config/github_labels.json'
+      uri    : this.opts.apiUrl + '/repos/' + config_repo + '/contents/config/github_labels.json'
     , headers: header
     , auth   : this.auth
     , json   : true
@@ -167,7 +167,7 @@ function* standardize(args) {
  */
 function* handle_repo_labels(org, repo, config, destructive) {
 
-  var uri = 'https://api.github.com/repos/' + org + '/' + repo + '/labels'
+  var uri = this.opts.apiUrl + '/repos/' + org + '/' + repo + '/labels'
   var res = yield request({
       uri    : uri
     , headers: header
@@ -261,7 +261,7 @@ function* get_repos(org) {
   // handle github pagination for orgs with many repos
   while (++page) {
     var res = yield request({
-        uri    : 'https://api.github.com/users/' + org + '/repos?page=' + page
+        uri    : this.opts.apiUrl + '/' + (this.opts.org ? 'orgs' : 'users') + '/' + org + '/repos?page=' + page
       , headers: header
       , auth   : this.auth
       , json   : true
@@ -319,7 +319,7 @@ function* handle_label(org, method, opts, done) {
 function* send_label(org, repos, opts, method) {
   var arr = []
   var i   = repos.length
-  var uri = 'https://api.github.com/repos/' + org + '/'
+  var uri = this.opts.apiUrl + '/repos/' + org + '/'
 
   while (i--) {
     arr.push(request({

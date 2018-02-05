@@ -20,6 +20,9 @@ program
   .version(version)
   .usage('<command>')
   .option('-d, --destructive', 'allow standardize to remove labels that are not found in the config file')
+  .option('-u --api-url <url>', 'set your github api url prefix', undefined, 'https://api.github.com')
+  .option('-a --auth-token <authToken>', 'set a personal access token to authenticate with')
+  .option('-o --org', 'force specifying an organization rather than a user (github enterprise has conflicts without specifying this)')
 
 program
   .command('add <org> <label> <color>')
@@ -62,26 +65,35 @@ if (!program.args.length) program.help()
 
 function co_labels(fn, args) {
   co(_org_labels(fn, args))
-  .then(process.exit)
-  .catch(function (err) {
-    if (err.options && err.options.uri) {
-      console.log('Error: %s - %s', err.statusCode, err.options.uri)
-    } else {
-      console.log(err.stack)
-    }
-    process.exit()
-  })
+    .then(process.exit)
+    .catch(function (err) {
+      if (err.options && err.options.uri) {
+        console.log('Error: %s - %s', err.statusCode, err.options.uri)
+      } else {
+        console.log(err.stack)
+      }
+      process.exit()
+    })
 }
 
 function* _org_labels(fn, args) {
   yield* check_version()
 
-  var auth = yield ghauth({
-      configName: 'org-labels'
-    , userAgent : 'org-labels'
-    , note      : 'org-labels CLI tool'
-    , scopes    : []
-  })
+  var auth;
+
+  if (program.authToken) {
+    auth = {
+      token: program.authToken,
+    }
+  } else {
+    auth = yield ghauth({
+      authURL: program.apiUrl + '/authorizations'
+      , configName: 'org-labels'
+      , userAgent: 'org-labels'
+      , note: 'org-labels CLI tool'
+      , scopes: []
+    })
+  }
 
   yield check_github_ratelimit(auth)
 
@@ -96,16 +108,16 @@ function* _org_labels(fn, args) {
  */
 function* check_version() {
   var res = yield request({
-      uri : 'https://registry.npmjs.org/org-labels/latest'
+    uri: 'https://registry.npmjs.org/org-labels/latest'
     , json: true
-  }).catch(function(err) {
+  }).catch(function (err) {
     console.log('Error checking for update:', err.message)
   })
 
   if (!res) return // meh
 
   var rl = readln.createInterface({
-      input:  process.stdin
+    input: process.stdin
     , output: process.stdout
   })
   var confirm = Promise.promisify(rl.question)
@@ -124,22 +136,28 @@ function* check_version() {
  * checks GitHub's rate-limit to see if we can make enough requests.
  */
 function* check_github_ratelimit(auth) {
-  var res = yield request({
-      uri    : 'https://api.github.com/rate_limit'
-    , json   : true
-    , auth   : { user: auth.token, pass: 'x-oauth-basic' }
-    , headers: { 'User-Agent': 'org-labels' }
-  }).catch(function(err) {
-    console.log('Error getting rate-limit:', err.message)
-  })
+  try {
+    var res = yield request({
+      uri: program.apiUrl + '/rate_limit'
+      , json: true
+      , auth: { user: auth.token, pass: 'x-oauth-basic' }
+      , headers: { 'User-Agent': 'org-labels' }
+    })
 
-  var limit = res.resources
+    var limit = res.resources
 
-  if (limit.core.remaining < 90) {
-    console.log('GitHub rate-limit remaining is too low.')
-    console.log('Please try again %s. Bailing.', moment(limit.core.reset * 1000).fromNow())
-    process.exit()
+    if (limit.core.remaining < 90) {
+      console.log('GitHub rate-limit remaining is too low.')
+      console.log('Please try again %s. Bailing.', moment(limit.core.reset * 1000).fromNow())
+      process.exit()
+    }
+
+    console.log('GitHub rate limit remaining: %s', limit.core.remaining)
+  } catch (e) {
+    if (e.statusCode === 404) {
+      console.log('GitHub rate limiting disabled.');
+    } else {
+      console.log('Error getting rate-limit: ' + e.statusCode + ' - ' + e.message);
+    }
   }
-
-  console.log('GitHub rate limit remaining: %s', limit.core.remaining)
 }
