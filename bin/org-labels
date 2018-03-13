@@ -95,8 +95,6 @@ function* _org_labels(fn, args) {
     })
   }
 
-  yield check_github_ratelimit(auth)
-
   var org_labels = new Labeler(program, auth)
 
   yield* org_labels[fn](args)
@@ -130,34 +128,4 @@ function* check_version() {
   }
 
   rl.close()
-}
-
-/*
- * checks GitHub's rate-limit to see if we can make enough requests.
- */
-function* check_github_ratelimit(auth) {
-  try {
-    var res = yield request({
-      uri: program.apiUrl + '/rate_limit'
-      , json: true
-      , auth: { user: auth.token, pass: 'x-oauth-basic' }
-      , headers: { 'User-Agent': 'org-labels' }
-    })
-
-    var limit = res.resources
-
-    if (limit.core.remaining < 90) {
-      console.log('GitHub rate-limit remaining is too low.')
-      console.log('Please try again %s. Bailing.', moment(limit.core.reset * 1000).fromNow())
-      process.exit()
-    }
-
-    console.log('GitHub rate limit remaining: %s', limit.core.remaining)
-  } catch (e) {
-    if (e.statusCode === 404) {
-      console.log('GitHub rate limiting disabled.');
-    } else {
-      console.log('Error getting rate-limit: ' + e.statusCode + ' - ' + e.message);
-    }
-  }
 }

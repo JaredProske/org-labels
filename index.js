@@ -107,8 +107,6 @@ function* rename(args) {
 
 /*
  * Standardizes a json list of labels across all repos in an org.
- *
- * The json list must reside in a repo at config/github_labels.json
  */
 function* standardize(args) {
   var org         = args[0]
@@ -119,20 +117,12 @@ function* standardize(args) {
     config_repo = org + '/' + config_repo
   }
 
-  var res = yield request({
-      uri    : this.opts.apiUrl + '/repos/' + config_repo + '/contents/config/github_labels.json'
+  var config = yield request({
+      uri    : this.opts.apiUrl + '/repos/' + config_repo + '/labels'
     , headers: header
     , auth   : this.auth
     , json   : true
-    , resolveWithFullResponse: true
   }).catch(log_request_err('error retrieving config from repo:'))
-
-  if (!res) process.exit()
-
-  // github sends the body (json file) as base64
-  var config = JSON.parse(new Buffer(res.body.content, 'base64').toString('utf8'))
-  if (!Array.isArray(config))
-    throw new Error('error: github_labels.json must be a json array')
 
   // check if the org specifies a single repo via org/repo
   if (~org.indexOf('/')) {
@@ -402,11 +392,6 @@ function log_result(result, label) {
  */
 function log_request_err(msg) {
   return function (err) {
-    if (err.response.headers['x-ratelimit-remaining']>>0 === 0) {
-      console.log('Exceded GitHub rate-limit. Bailing.')
-      return process.exit()
-    }
-
     console.log(msg, JSON.stringify(err.response.headers) +'\n')
   }
 }
